@@ -3,6 +3,7 @@ My POC for malicious powershell scripts loader designed to bypass security contr
 
 ## Features
 - Hell's gate and Halo gate syscaller
+- Switch to Veles' Reek technique (in case all syscalls were hooked, and hell's gate and halo gate failed)
 - Protecting powershell process from AV/EDRs via block any non-microsoft signed DLLs
 - Bypass application control even if EDR could monitor the remote process (powershell maybe blocked by EDR)
 - Detecting EDR userland hooks in the remote process, and remove them in case EDR was able to inject its hooks into powershell process
