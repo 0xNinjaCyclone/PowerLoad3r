@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #define BUFSIZE 4096 
-#define SYSCALLSCOUNT 475
+#define SYSCALLSCOUNT 470
 #define KEY 0xd1
 #define HASHKEY 0x416264616c6c6168
 
@@ -242,6 +242,7 @@ extern VOID HellsGate(WORD);
 extern NTSTATUS HellDescent();
 extern WORD HaloGateDown(PVOID, WORD);
 extern WORD HaloGateUp(PVOID, WORD);
+extern WORD VelesReek(DWORD, PVOID, PVOID);
 
 
 APIS g_APIs;

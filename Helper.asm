@@ -32,7 +32,7 @@ HellsGateGrabber proc
 	comment $
 		every syscall starts with the following instrucions
 			; mov r10, rcx
-            ; mov eax, <SyscallNumber> <-- We need to resolve this number
+			; mov eax, <SyscallNumber> <-- We need to resolve this number
 	$
 
 	; syscall pattern
@@ -99,7 +99,7 @@ HaloGateDown proc
 	comment $
 		every syscall starts with the following instructions
 			; mov r10, rcx
-            ; mov eax,
+			; mov eax,
 
 		the b8d18b4ch value is the machine code of these instruction,
 		let's move it to esi register to compare it with the neighbor syscall
@@ -109,7 +109,7 @@ HaloGateDown proc
 	comment $
 		Check if the neighbor syscall starts with
 			; mov r10, rcx
-            ; mov eax,
+			; mov eax,
 	$
 	cmp esi, edi
 
@@ -147,7 +147,7 @@ HaloGateUp proc
 	comment $
 		every syscall starts with the following instructions
 			; mov r10, rcx
-            ; mov eax,
+			; mov eax,
 
 		the b8d18b4ch value is the machine code of these instruction,
 		let's move it to esi register to compare it with the neighbor syscall
@@ -157,7 +157,7 @@ HaloGateUp proc
 	comment $
 		Check if the neighbor syscall starts with
 			; mov r10, rcx
-            ; mov eax,
+			; mov eax,
 	$
 	cmp esi, edi
 
@@ -171,5 +171,70 @@ HaloGateUp proc
 	add ax, bx
 	ret
 HaloGateUp endp
+
+; Used in VelesReek
+FixSyscallNumber proc
+	inc rax
+	ret
+FixSyscallNumber endp
+
+; Calculate syscall number from its position between others syscalls
+VelesReek proc
+	; Clear registers
+	xor rax, rax
+	xor rbx, rbx
+	
+	; pattern of -> 'syscall ; ret ; int'
+	mov edi, 0cdc3050fh
+
+	DIG:
+	; Move instructions into esi to campare with the pattern
+	mov esi, [rdx]
+
+	; Move to the next address
+	inc rdx
+
+	; Compare pattern with current instructions
+	cmp esi, edi
+	
+	; Find syscall address
+	je FINDSYSCALLADDR
+
+	; Dig deeper
+	loop DIG
+	
+	FINDSYSCALLADDR:
+	; We have found a syscall
+	inc rbx
+
+	; Find syscall address
+	mov rax, rdx	; pattern address
+	dec rax			; decrease address by one because the instructions above have increased it			
+	sub rax, 12h	; pattern - 0x12 = syscall address
+
+	; Check if it's the target stub or not, to continue in digging
+	cmp rax, r8
+	
+	; If it's not the target syscall, dig deeper
+	jne DIG
+
+	; Syscall numbers starts from 0, 
+	dec rbx
+
+	; For return syscall number
+	mov rax, rbx
+
+	; NtQuerySystemTime syscall number
+	mov cx, 05ah
+
+	; check if the syscall number we found after NtQuerySystemTime or not
+	cmp bx, cx
+
+	; If the syscall number we found is greater than NtQuerySystemTime number, we must increase it with one
+	; because we missed this syscall, because it doesn't have the pattern we use.
+	jge FixSyscallNumber
+
+	ret
+VelesReek endp
 	
 end

