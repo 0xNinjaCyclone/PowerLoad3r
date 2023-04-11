@@ -208,9 +208,9 @@ VelesReek proc
 	inc rbx
 
 	; Find syscall address
-	mov rax, rdx	; pattern address
-	dec rax			; decrease address by one because the instructions above have increased it			
-	sub rax, 12h	; pattern - 0x12 = syscall address
+	mov rax, rdx    ; pattern address
+	dec rax         ; decrease address by one because the instructions above have increased it			
+	sub rax, 12h    ; pattern - 0x12 = syscall address
 
 	; Check if it's the target stub or not, to continue in digging
 	cmp rax, r8
@@ -218,7 +218,7 @@ VelesReek proc
 	; If it's not the target syscall, dig deeper
 	jne DIG
 
-	; Syscall numbers starts from 0, 
+	; Syscall numbers starts from 0
 	dec rbx
 
 	; For return syscall number
