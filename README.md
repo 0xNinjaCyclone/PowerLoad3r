@@ -11,7 +11,7 @@ My POC for malicious powershell scripts loader designed to bypass security contr
 - Hiding powershell instructions using anonymous pipes
 - No RWX
 - API calls and syscalls hash obfuscation
-- Custom implementation for GetModuleHandle/GetProcAddress
+- Custom implementation for GetModuleHandle/GetProcAddress in assembly
 - Blinding ETW (Event Tracing for Windows)
 
 ## Preview

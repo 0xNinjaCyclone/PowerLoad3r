@@ -240,7 +240,8 @@ typedef struct _SYSCALL_TABLE
 } SYSCALL_TABLE, * PSYSCALL_TABLE;
 
 
-extern _PPEB GetPEB();
+extern HMODULE GetModuleHandleW2(LPCWCHAR);
+extern PVOID GetProcAddress2(HMODULE, LPCCH);
 extern WORD HellsGateGrabber(PVOID);
 extern VOID HellsGate(WORD);
 extern NTSTATUS HellDescent();

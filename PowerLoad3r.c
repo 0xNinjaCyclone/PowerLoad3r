@@ -182,66 +182,6 @@ PIMAGE ParseImage(PVOID pImg)
     return pParseImg;
 }
 
-PVOID GetProcAddrFromImage(PIMAGE pImg, LPCCH cProcName)
-{
-    PVOID pProcAddr = NULL;
-    PCHAR cProcName2;
-
-    for (WORD idx = 0; idx < pImg->pExpDir->NumberOfNames; idx++)
-    {
-        cProcName2 = (PCHAR)((DWORD_PTR)GETMODULEBASE(pImg) + pImg->pdwAddrOfNames[idx]);
-
-        if (RtlEqualMemory(cProcName, cProcName2, strlen(cProcName)))
-        {
-            pProcAddr = (PVOID)((DWORD_PTR)GETMODULEBASE(pImg) + pImg->pdwAddrOfFunctions[pImg->pwAddrOfNameOrdinales[idx]]);
-            break;
-        }
-    }
-
-    return pProcAddr;
-}
-
-HMODULE GetModuleHandleW2(LPCWCHAR wcModuleName)
-{
-    _PPEB pPEB = GetPEB();
-
-    HMODULE hModule = NULL;
-
-    /* Get LoaDeR data structure which contains information about all of the loaded modules */
-    PPEB_LDR_DATA pLdr = pPEB->pLdr;
-    PLDR_DATA_TABLE_ENTRY pLdrData;
-    PLIST_ENTRY pEntryList = &pLdr->InMemoryOrderModuleList;
-
-    /* Walk through module list */
-    for (PLIST_ENTRY pEntry = pEntryList->Flink; pEntry != pEntryList; pEntry = pEntry->Flink)
-    {
-        pLdrData = (PLDR_DATA_TABLE_ENTRY)pEntry;
-
-        /* If the module ends with the dll name we search about, get its address */
-        if (ENDSWITHW(pLdrData->BaseDllName.pBuffer, wcModuleName))
-        {
-            hModule = (HMODULE)pLdrData->DllBase;
-            break;
-        }
-
-    }
-
-    return hModule;
-}
-
-PVOID GetProcAddress2(HMODULE hModule, LPCCH cProcName)
-{
-    PVOID pProcAddr = NULL;
-    PIMAGE pImg;
-
-    /* Parse module */
-    if (!(pImg = ParseImage((PVOID)hModule)))
-        return NULL;
-
-    return GetProcAddrFromImage(pImg, cProcName);
-}
-
-
 BOOL ResolveAPIs()
 {
     HMODULE hModule;
@@ -526,7 +466,6 @@ INT main(INT argc, PCHAR *argv)
 
     PRINT_STATUS("Prepare syscalls and API calls");
     ResolveSyscalls(pLocalNtDLLImg);
-
 
     if (!ResolveAPIs())
     {
