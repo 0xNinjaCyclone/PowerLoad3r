@@ -1,8 +1,8 @@
 
-comment $
-	Author	=> Abdallah Mohamed
-	Date	=> 4-3-2023/09:29PM
-$
+;****************************
+; Author  => Abdallah Mohamed
+; Date    => 4-3-2023/09:29PM
+;****************************
 
 
 .data
@@ -71,7 +71,7 @@ GetModuleHandleW2 proc
 	NEXT_MODULE:
 	cld                       ; Clear Direction Flag
 	mov rax, [rax]            ; Move to the next node in the list 
-	cmp rax, rbx              ; Check if we reach last node, first == last
+	cmp rax, rbx              ; Check if we reach last node, first == last->next
 	jz RequiredDataNotFound
 	mov rsi, [rax + 50h]      ; Get unicode module name
 	push rsi                  ; Save current module name
@@ -81,10 +81,8 @@ GetModuleHandleW2 proc
 	pop rcx                   ; Restore the length of the module name from the stack
 	pop rdi                   ; Restore required module name
 	pop rsi                   ; Restore current module name
-	jz FOUND                  ; Jump if we found the required dll 
-	jmp NEXT_MODULE
+	jnz NEXT_MODULE           ; Search until find required module
 
-	FOUND:
 	mov rax, [rax + 20h]      ; Get dll base address
 	ret
 GetModuleHandleW2 endp
@@ -151,7 +149,6 @@ GetProcAddress2 proc
 	add r8, rdx                      ; Add base address
 	mov eax, [r8 + 4h * rcx]         ; Get required function address RVA
 	add rax, rdx                     ; Add base address
-
 	ret
 
 	NEXT_FUNCTION2:
@@ -169,31 +166,19 @@ HookedSyscall endp
 
 ; Grab syscall number dynamically
 HellsGateGrabber proc
-	comment $
-		every syscall starts with the following instrucions
-			; mov r10, rcx
-			; mov eax, <SyscallNumber> <-- We need to resolve this number
-	$
+	;**********************************************************************
+	;	every syscall starts with the following instrucions
+	;		- mov r10, rcx
+	;		- mov eax, <SyscallNumber> <-- We need to resolve this number
+	;**********************************************************************
 
-	; syscall pattern
-	mov esi, 0b8d18b4ch
-
-	; move the syscall content into edi 
-	mov edi, [rcx]
-
-	; Check if hooked or not
-	cmp esi, edi
-
-	; return 0 if hooked
-	jne HookedSyscall
-
-	; Clear accumlator 
-	xor rax, rax
-
-	; Grab the syscall number
-	mov ax, [rcx + 4]
-
-	; the end of the procedure
+	
+	mov esi, 0b8d18b4ch   ; syscall pattern
+	mov edi, [rcx]        ; move the syscall content into edi 
+	cmp esi, edi          ; Check if hooked or not
+	jne HookedSyscall     ; return 0 if hooked
+	xor rax, rax          ; Clear accumlator 
+	mov ax, [rcx + 4]     ; Grab the syscall number
 	ret
 HellsGateGrabber endp
 
@@ -206,59 +191,26 @@ HellsGate endp
 
 ; Call the specified syscall
 HellDescent proc
-	; Move args into r10 register which used by the syscall
 	mov r10, rcx
-
-	; Specify the syscall number
 	mov eax, dword ptr wSysCallNumber
-
 	syscall
 	ret
 HellDescent endp
 
 ; Try to resolve syscall from neighbors
 HaloGateDown proc
-	; syscall size
-	mov rax, 20h
+	mov rax, 20h         ; Stub size
+	xor rbx, rbx         ; Clear rbx register
+	mov bx, dx           ; Save dx in bx to use it later, because mul instruction will destroy dx
+	mul dx               ; Multiply size of syscall by the index of neighbors
+	add rcx, rax         ; Go down
+	mov edi, [rcx]       ; Move the neighbor syscall content into edi 
+	mov esi, 0b8d18b4ch  ; Native API instructions pattern
+	cmp esi, edi         ; Check if the given NTAPI Address matches the pattern
+	jne HookedSyscall    ; If hooked return 0
 
-	; Clear rbx register
-	xor rbx, rbx
-
-	; Save dx in bx to use it later, because mul instruction will destroy dx
-	mov bx, dx
-
-	; multiply size of syscall by the index of neighbors
-	mul dx
-
-	; go down
-	add rcx, rax
-
-	; move the neighbor syscall content into edi 
-	mov edi, [rcx]
-
-	comment $
-		every syscall starts with the following instructions
-			; mov r10, rcx
-			; mov eax,
-
-		the b8d18b4ch value is the machine code of these instruction,
-		let's move it to esi register to compare it with the neighbor syscall
-	$
-	mov esi, 0b8d18b4ch
-
-	comment $
-		Check if the neighbor syscall starts with
-			; mov r10, rcx
-			; mov eax,
-	$
-	cmp esi, edi
-
-	; if hooked return 0
-	jne HookedSyscall
-
+	; Return the syscall number
 	xor rax, rax
-
-	; return the syscall number
 	mov ax, [rcx + 4]
 	sub ax, bx
 	ret
@@ -266,47 +218,17 @@ HaloGateDown endp
 
 ; Try to resolve syscall from neighbors
 HaloGateUp proc
-	; syscall size
-	mov rax, 20h
-
-	; Clear rbx register
-	xor rbx, rbx
-
-	; Save dx in bx to use it later, because mul instruction will destroy dx
+	mov rax, 20h 
+	xor rbx, rbx 
 	mov bx, dx
-
-	; multiply size of syscall by the index of neighbors
 	mul dx
-
-	; go up
-	sub rcx, rax
-
-	; move the neighbor syscall content into edi 
+	sub rcx, rax     ; Go up
 	mov edi, [rcx]
-
-	comment $
-		every syscall starts with the following instructions
-			; mov r10, rcx
-			; mov eax,
-
-		the b8d18b4ch value is the machine code of these instruction,
-		let's move it to esi register to compare it with the neighbor syscall
-	$
 	mov esi, 0b8d18b4ch
-
-	comment $
-		Check if the neighbor syscall starts with
-			; mov r10, rcx
-			; mov eax,
-	$
 	cmp esi, edi
-
-	; if hooked return 0
 	jne HookedSyscall
 
 	xor rax, rax
-
-	; return the syscall number
 	mov ax, [rcx + 4]
 	add ax, bx
 	ret
@@ -324,53 +246,31 @@ VelesReek proc
 	xor rax, rax
 	xor rbx, rbx
 	
-	; pattern of -> 'syscall ; ret ; int'
-	mov edi, 0cdc3050fh
+	mov edi, 0cdc3050fh  ; Pattern of -> 'syscall ; ret ; int'
 
 	DIG:
-	; Move instructions into esi to campare with the pattern
-	mov esi, [rdx]
-
-	; Move to the next address
-	inc rdx
-
-	; Compare pattern with current instructions
-	cmp esi, edi
-	
-	; Find syscall address
-	je FINDSYSCALLADDR
-
-	; Dig deeper
-	loop DIG
+	mov esi, [rdx]       ; Move instructions into esi to campare with the pattern
+	inc rdx              ; Move to the next address
+	cmp esi, edi         ; Compare pattern with current instructions
+	je FINDSYSCALLADDR   ; Find syscall address
+	loop DIG             ; Dig deeper
 	
 	FINDSYSCALLADDR:
 	; We have found a syscall
-	inc rbx
+	inc rbx         ; Increase SSN counter
 
 	; Find syscall address
-	mov rax, rdx    ; pattern address
-	dec rax         ; decrease address by one because the instructions above have increased it			
-	sub rax, 12h    ; pattern - 0x12 = syscall address
+	mov rax, rdx    ; Pattern address
+	dec rax         ; Decrease address by one because the instructions above have increased it			
+	sub rax, 12h    ; Pattern - 0x12 = syscall address
+	cmp rax, r8     ; Check if it's the target stub or not, to continue in digging
+	jne DIG         ; If it's not the target syscall, dig deeper
+	dec rbx         ; Syscall numbers starts from 0
+	mov rax, rbx    ; For return syscall number
+	mov cx, 05ah    ; NtQuerySystemTime syscall number
+	cmp bx, cx      ; check if the syscall number we found after NtQuerySystemTime or not
 
-	; Check if it's the target stub or not, to continue in digging
-	cmp rax, r8
-	
-	; If it's not the target syscall, dig deeper
-	jne DIG
-
-	; Syscall numbers starts from 0
-	dec rbx
-
-	; For return syscall number
-	mov rax, rbx
-
-	; NtQuerySystemTime syscall number
-	mov cx, 05ah
-
-	; check if the syscall number we found after NtQuerySystemTime or not
-	cmp bx, cx
-
-	; If the syscall number we found is greater than NtQuerySystemTime number, we must increase it with one
+	; If the syscall number we found is greater than NtQuerySystemTime number, we must increase it by one
 	; because we missed this syscall, because it doesn't have the pattern we use.
 	jge FixSyscallNumber
 
