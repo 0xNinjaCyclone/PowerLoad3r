@@ -5,6 +5,9 @@
 ;****************************
 
 
+SSN_INITIAL EQU -1
+
+
 .data
 
 ; will store the syscall number to use with HellDescent procedure
@@ -52,6 +55,46 @@ GetStrLenA proc
 	ret
 GetStrLenA endp
 
+; Compare unicode string 
+; Input  = RSI -> Address of the src
+;          RDI -> Address of the dest
+;          RCX -> Number of the bytes 
+; Output = ZF
+StrNCmpW proc
+	; Save inputs (The operation will destroy them)
+	push rsi
+	push rdi
+	push rcx
+
+	repe cmpsw
+	
+	; Restore inputs 
+	pop rcx
+	pop rdi
+	pop rsi
+	ret
+StrNCmpW endp
+
+; Compare ansi string 
+; Input  = RSI -> Address of the src
+;          RDI -> Address of the dest
+;          RCX -> Number of bytes 
+; Output = ZF
+StrNCmpA proc
+	; Save inputs (The operation will destroy them)
+	push rsi
+	push rdi
+	push rcx
+
+	repe cmpsb
+	
+	; Restore inputs 
+	pop rcx
+	pop rdi
+	pop rsi
+	ret
+StrNCmpA endp
+
 ; Used in GetModuleHandle2 and GetProcAddress2
 RequiredDataNotFound proc
 	xor rax, rax          ; Return NULL if we didn't find the required data
@@ -74,13 +117,7 @@ GetModuleHandleW2 proc
 	cmp rax, rbx              ; Check if we reach last node, first == last->next
 	jz RequiredDataNotFound
 	mov rsi, [rax + 50h]      ; Get unicode module name
-	push rsi                  ; Save current module name
-	push rdi                  ; Save required module name
-	push rcx                  ; Save the length of module name in the stack
-	repe cmpsw                ; Compare current dll name with required dll
-	pop rcx                   ; Restore the length of the module name from the stack
-	pop rdi                   ; Restore required module name
-	pop rsi                   ; Restore current module name
+	call StrNCmpW             ; Compare current dll name with required dll name
 	jnz NEXT_MODULE           ; Search until find required module
 
 	mov rax, [rax + 20h]      ; Get dll base address
@@ -110,13 +147,7 @@ GetProcAddress2 proc
 	add rsi, rdx                     ; Add base address
 	pop rbx                          ; Restore procedure name length from the stack
 	xchg rbx, rcx                    ; Toggling between prcedure name and number of functions
-	push rsi                         ; Save current function name
-	push rdi                         ; Save required function name
-	push rcx                         ; Save required function name length
-	repe cmpsb                       ; Compare function name with required function
-	pop rcx                          ; Restore the length of the function name
-	pop rdi                          ; Restore required function name
-	pop rsi                          ; Restore current function name
+	call StrNCmpA                    ; Compare current function name with required function name
 	jz FOUND                         ; Jump if we found the required function 
 	xchg rbx, rcx                    ; Back function length and number of function names again
 	push rbx                         ; Save function name length in the stack
@@ -159,8 +190,7 @@ GetProcAddress2 endp
 
 ; For return 0 if the syscall was hooked
 HookedSyscall proc
-	; return 0
-	mov rax, 0
+	xor rax, rax
 	ret
 HookedSyscall endp
 
@@ -242,33 +272,33 @@ FixSyscallNumber endp
 
 ; Calculate syscall number from its position between others syscalls
 VelesReek proc
-	; Clear registers
-	xor rax, rax
-	xor rbx, rbx
-	
+	mov rbx, SSN_INITIAL
 	mov edi, 0cdc3050fh  ; Pattern of -> 'syscall ; ret ; int'
 
 	DIG:
 	mov esi, [rdx]       ; Move instructions into esi to campare with the pattern
-	inc rdx              ; Move to the next address
 	cmp esi, edi         ; Compare pattern with current instructions
-	je FINDSYSCALLADDR   ; Find syscall address
-	loop DIG             ; Dig deeper
+	je SYSCALL_FOUND     ; Find syscall address
 	
-	FINDSYSCALLADDR:
+	NEXT:
+	inc rdx              ; Move to the next address
+	loop DIG             ; Dig deeper
+
+	; To avoid the unexpected behavior if the given module address was not the expected 
+	mov rax, SSN_INITIAL
+	ret
+	
+	SYSCALL_FOUND:
 	; We have found a syscall
-	inc rbx         ; Increase SSN counter
+	inc rbx              ; Increase SSN counter
 
 	; Find syscall address
-	mov rax, rdx    ; Pattern address
-	dec rax         ; Decrease address by one because the instructions above have increased it			
-	sub rax, 12h    ; Pattern - 0x12 = syscall address
-	cmp rax, r8     ; Check if it's the target stub or not, to continue in digging
-	jne DIG         ; If it's not the target syscall, dig deeper
-	dec rbx         ; Syscall numbers starts from 0
-	mov rax, rbx    ; For return syscall number
-	mov cx, 05ah    ; NtQuerySystemTime syscall number
-	cmp bx, cx      ; check if the syscall number we found after NtQuerySystemTime or not
+	lea rax, [rdx - 12h] ; Stub address
+	cmp rax, r8          ; Check if it's the target stub or not, to continue in digging
+	jne NEXT             ; If it's not the target syscall, dig deeper
+	mov rax, rbx         ; For return syscall number
+	mov cx, 05ah         ; NtQuerySystemTime syscall number
+	cmp bx, cx           ; check if the syscall number we found after NtQuerySystemTime or not
 
 	; If the syscall number we found is greater than NtQuerySystemTime number, we must increase it by one
 	; because we missed this syscall, because it doesn't have the pattern we use.
