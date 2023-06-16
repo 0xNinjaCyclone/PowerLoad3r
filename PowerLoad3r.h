@@ -7,7 +7,7 @@
 #define SYSCALLSCOUNT 470
 #define KEY 0xd1
 #define HASHKEY 0x416264616c6c6168
-
+#define INVALID_SSN -1
 #define STATUS_SUCCESS ((NTSTATUS)0x00000000L)
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 

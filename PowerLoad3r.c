@@ -86,7 +86,7 @@ VOID FindSyscall(PIMAGE pNtDLLImg, PSYSCALL_ENTRY pEntry)
         if (djb2(cFuncName) != DeObfuscateHash(pEntry->dwHash))
             continue;
 
-        if ((pEntry->wSyscall = HellsGateGrabber((PVOID)pFuncAddr)) != 0)
+        if ((pEntry->wSyscall = HellsGateGrabber((PVOID)pFuncAddr)) != INVALID_SSN)
             return;
         
         break;
@@ -96,11 +96,11 @@ VOID FindSyscall(PIMAGE pNtDLLImg, PSYSCALL_ENTRY pEntry)
     for (WORD idx = 1; idx < SYSCALLSCOUNT; idx++)
     {
         /* Go Down */
-        if ((pEntry->wSyscall = HaloGateDown((PVOID)pFuncAddr, idx)) != 0)
+        if ((pEntry->wSyscall = HaloGateDown((PVOID)pFuncAddr, idx)) != INVALID_SSN)
             return;
 
         /* Go Up */
-        if ((pEntry->wSyscall = HaloGateUp((PVOID)pFuncAddr, idx)) != 0)
+        if ((pEntry->wSyscall = HaloGateUp((PVOID)pFuncAddr, idx)) != INVALID_SSN)
             return;
     }
 

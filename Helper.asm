@@ -1,11 +1,13 @@
 
-;****************************
+;****************************************
 ; Author  => Abdallah Mohamed
+; Email   => elsharifabdallah53@gmail.com
 ; Date    => 4-3-2023/09:29PM
-;****************************
+;****************************************
 
 
 SSN_INITIAL EQU -1
+INVALID_SSN EQU SSN_INITIAL
 
 
 .data
@@ -188,25 +190,25 @@ GetProcAddress2 proc
 
 GetProcAddress2 endp
 
-; For return 0 if the syscall was hooked
-HookedSyscall proc
-	xor rax, rax
+; For return -1 if the syscall was hooked
+InvalidSyscall proc
+	mov rax, INVALID_SSN
 	ret
-HookedSyscall endp
+InvalidSyscall endp
 
 ; Grab syscall number dynamically
 HellsGateGrabber proc
 	;**********************************************************************
 	;	every syscall starts with the following instrucions
-	;		- mov r10, rcx
-	;		- mov eax, <SyscallNumber> <-- We need to resolve this number
+	;	    - mov r10, rcx
+	;	    - mov eax, <SyscallNumber> <-- We need to resolve this number
 	;**********************************************************************
 
 	
 	mov esi, 0b8d18b4ch   ; syscall pattern
 	mov edi, [rcx]        ; move the syscall content into edi 
 	cmp esi, edi          ; Check if hooked or not
-	jne HookedSyscall     ; return 0 if hooked
+	jne InvalidSyscall    ; return -1 if hooked
 	xor rax, rax          ; Clear accumlator 
 	mov ax, [rcx + 4]     ; Grab the syscall number
 	ret
@@ -237,7 +239,7 @@ HaloGateDown proc
 	mov edi, [rcx]       ; Move the neighbor syscall content into edi 
 	mov esi, 0b8d18b4ch  ; Native API instructions pattern
 	cmp esi, edi         ; Check if the given NTAPI Address matches the pattern
-	jne HookedSyscall    ; If hooked return 0
+	jne InvalidSyscall   ; If hooked return -1
 
 	; Return the syscall number
 	xor rax, rax
@@ -256,7 +258,7 @@ HaloGateUp proc
 	mov edi, [rcx]
 	mov esi, 0b8d18b4ch
 	cmp esi, edi
-	jne HookedSyscall
+	jne InvalidSyscall
 
 	xor rax, rax
 	mov ax, [rcx + 4]
@@ -278,21 +280,17 @@ VelesReek proc
 	DIG:
 	mov esi, [rdx]       ; Move instructions into esi to campare with the pattern
 	cmp esi, edi         ; Compare pattern with current instructions
-	je SYSCALL_FOUND     ; Find syscall address
+	je SYSCALL_FOUND
 	
 	NEXT:
 	inc rdx              ; Move to the next address
 	loop DIG             ; Dig deeper
 
 	; To avoid the unexpected behavior if the given module address was not the expected 
-	mov rax, SSN_INITIAL
-	ret
+	jmp InvalidSyscall
 	
 	SYSCALL_FOUND:
-	; We have found a syscall
 	inc rbx              ; Increase SSN counter
-
-	; Find syscall address
 	lea rax, [rdx - 12h] ; Stub address
 	cmp rax, r8          ; Check if it's the target stub or not, to continue in digging
 	jne NEXT             ; If it's not the target syscall, dig deeper
